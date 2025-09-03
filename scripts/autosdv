@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""
+AutoSDV - Unified CLI for autonomous vehicle system management
+"""
+import sys
+import os
+from pathlib import Path
+
+# Find the installed Python package directory
+script_dir = Path(__file__).parent
+install_root = script_dir.parent.parent  # Go up from lib/package_name to install root
+python_path = install_root / "local/lib/python3.10/dist-packages"
+
+if python_path.exists():
+    sys.path.insert(0, str(python_path))
+else:
+    # Fallback: try to find it relative to script location
+    package_dir = script_dir.parent.parent.parent / "src/system"
+    if package_dir.exists():
+        sys.path.insert(0, str(package_dir))
+
+from autosdv_runtime.cli import main
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""
+AutoSDV SystemD Service Installer
+Installs systemd user services for AutoSDV deployment
+"""
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from .common import get_package_share_dir, get_current_user, run_command, setup_logging
+
+logger = setup_logging()
+
+
+class SystemDInstaller:
+    def __init__(self):
+        self.username = get_current_user()
+        self.user_systemd_dir = Path.home() / '.config/systemd/user'
+        
+        try:
+            self.package_share_dir = get_package_share_dir('autosdv_runtime')
+            self.systemd_templates_dir = self.package_share_dir / 'systemd'
+        except RuntimeError:
+            logger.error("Could not locate autosdv_runtime package")
+            sys.exit(1)
+
+    def log_info(self, message: str):
+        print(f"[INFO] {message}")
+
+    def log_success(self, message: str):
+        print(f"[SUCCESS] {message}")
+
+    def log_error(self, message: str):
+        print(f"[ERROR] {message}")
+
+    def install_services(self):
+        """Install systemd service files"""
+        self.log_info("Installing AutoSDV systemd services...")
+        
+        # Create user systemd directory
+        self.user_systemd_dir.mkdir(parents=True, exist_ok=True)
+        
+        if not self.systemd_templates_dir.exists():
+            self.log_error(f"SystemD templates not found at: {self.systemd_templates_dir}")
+            return False
+        
+        # Service files to install
+        service_files = [
+            'autosdv.service',
+            'autosdv-healthcheck.service',
+            'autosdv-healthcheck.timer',
+            'autosdv-web-control.service'
+        ]
+        
+        installed_files = []
+        
+        for service_file in service_files:
+            src_file = self.systemd_templates_dir / service_file
+            dst_file = self.user_systemd_dir / service_file
+            
+            if src_file.exists():
+                self.log_info(f"Installing {service_file}")
+                shutil.copy2(src_file, dst_file)
+                installed_files.append(service_file)
+            else:
+                self.log_error(f"Service template not found: {src_file}")
+                return False
+        
+        # Reload systemd daemon
+        try:
+            run_command(['systemctl', '--user', 'daemon-reload'])
+            self.log_success(f"Installed {len(installed_files)} systemd services")
+            self.log_info(f"Service files installed to: {self.user_systemd_dir}")
+            return True
+        except RuntimeError as e:
+            self.log_error(f"Failed to reload systemd daemon: {e}")
+            return False
+
+    def uninstall_services(self):
+        """Uninstall systemd service files"""
+        self.log_info("Uninstalling AutoSDV systemd services...")
+        
+        service_files = [
+            'autosdv.service',
+            'autosdv-healthcheck.service',
+            'autosdv-healthcheck.timer',
+            'autosdv-web-control.service'
+        ]
+        
+        removed_files = []
+        
+        for service_file in service_files:
+            service_path = self.user_systemd_dir / service_file
+            if service_path.exists():
+                self.log_info(f"Removing {service_file}")
+                service_path.unlink()
+                removed_files.append(service_file)
+        
+        # Reload systemd daemon
+        try:
+            run_command(['systemctl', '--user', 'daemon-reload'])
+            run_command(['systemctl', '--user', 'reset-failed'], check=False)
+            
+            if removed_files:
+                self.log_success(f"Removed {len(removed_files)} systemd services")
+            else:
+                self.log_info("No systemd services found to remove")
+            return True
+        except RuntimeError as e:
+            self.log_error(f"Failed to reload systemd daemon: {e}")
+            return False
+
+    def enable_lingering(self):
+        """Enable user lingering for automatic service startup"""
+        try:
+            run_command(['sudo', 'loginctl', 'enable-linger', self.username])
+            self.log_success("User lingering enabled - services will start at boot")
+            return True
+        except RuntimeError as e:
+            self.log_error(f"Failed to enable user lingering: {e}")
+            self.log_info("You may need to run: sudo loginctl enable-linger $(whoami)")
+            return False
+
+    def disable_lingering(self):
+        """Disable user lingering"""
+        try:
+            run_command(['sudo', 'loginctl', 'disable-linger', self.username])
+            self.log_success("User lingering disabled")
+            return True
+        except RuntimeError as e:
+            self.log_error(f"Failed to disable user lingering: {e}")
+            return False
+
+    def status(self):
+        """Show installation status"""
+        self.log_info("AutoSDV SystemD Installation Status")
+        print("=" * 50)
+        
+        # Check if services are installed
+        service_files = [
+            'autosdv.service',
+            'autosdv-healthcheck.service',
+            'autosdv-healthcheck.timer',
+            'autosdv-web-control.service'
+        ]
+        
+        installed_count = 0
+        for service_file in service_files:
+            service_path = self.user_systemd_dir / service_file
+            if service_path.exists():
+                print(f"✓ {service_file}: Installed")
+                installed_count += 1
+            else:
+                print(f"✗ {service_file}: Not installed")
+        
+        print(f"\nInstalled services: {installed_count}/{len(service_files)}")
+        
+        # Check lingering status
+        try:
+            result = run_command(['loginctl', 'show-user', self.username, '-p', 'Linger'], check=False)
+            if 'Linger=yes' in result.stdout:
+                print("✓ User lingering: Enabled")
+            else:
+                print("✗ User lingering: Disabled")
+        except:
+            print("? User lingering: Unknown")
+
+
+def main():
+    """Main entry point for autosdv-install-systemd command"""
+    parser = argparse.ArgumentParser(description='AutoSDV SystemD Service Installer')
+    parser.add_argument('command', choices=['install', 'uninstall', 'enable-linger', 'disable-linger', 'status'])
+    
+    args = parser.parse_args()
+    
+    installer = SystemDInstaller()
+    
+    try:
+        if args.command == 'install':
+            success = installer.install_services()
+            sys.exit(0 if success else 1)
+        elif args.command == 'uninstall':
+            success = installer.uninstall_services()
+            sys.exit(0 if success else 1)
+        elif args.command == 'enable-linger':
+            success = installer.enable_lingering()
+            sys.exit(0 if success else 1)
+        elif args.command == 'disable-linger':
+            success = installer.disable_lingering()
+            sys.exit(0 if success else 1)
+        elif args.command == 'status':
+            installer.status()
+    except Exception as e:
+        logger.error(f"Operation failed: {e}")
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
