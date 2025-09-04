@@ -30,15 +30,15 @@ class Colors:
 
 class AutoSDV:
     """Main AutoSDV command line interface"""
-    
+
     def __init__(self):
         self.username = get_current_user()
         self.workspace_dir = get_workspace_dir()
         self.user_systemd_dir = Path.home() / '.config/systemd/user'
-        
+
         # Service names
         self.service_name = f"autosdv@{self.username}"
-        
+
         # Try to get package share directory
         try:
             self.package_share_dir = get_package_share_dir('autosdv_runtime')
@@ -72,15 +72,15 @@ class AutoSDV:
     def install(self, args):
         """Install AutoSDV systemd services"""
         self.print_info("Installing AutoSDV systemd services...")
-        
+
         # Create user systemd directory if it doesn't exist
         self.user_systemd_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Check if launch script exists
         if not self.launch_script or not self.launch_script.exists():
             self.print_error(f"Launch script not found. Please build the workspace first.")
             return False
-        
+
         # Generate the service file with correct paths
         service_content = f"""[Unit]
 Description=AutoSDV Autonomous Vehicle System
@@ -109,29 +109,27 @@ TimeoutStartSec=120s
 TimeoutStopSec=30s
 
 # Logging
-StandardOutput=journal
-StandardError=journal
+StandardOutput=journal+console
+StandardError=journal+console
 SyslogIdentifier=autosdv
 
 [Install]
 WantedBy=default.target
 """
-        
+
         # Write service file
         service_file = self.user_systemd_dir / 'autosdv.service'
         with open(service_file, 'w') as f:
             f.write(service_content)
-        
+
         # Reload systemd daemon
         subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
-        
-        # Enable the service
-        subprocess.run(['systemctl', '--user', 'enable', 'autosdv'], check=True)
-        
+
         self.print_success(f"AutoSDV service installed to {service_file}")
-        self.print_info("Service will start automatically at login")
+        self.print_info("Service is installed but NOT enabled for automatic startup")
+        self.print_info("To enable automatic startup at login: autosdv enable")
         self.print_info("To start now, run: autosdv start")
-        
+
         # Check and suggest lingering
         result = subprocess.run(
             ['loginctl', 'show-user', self.username, '-p', 'Linger'],
@@ -140,13 +138,13 @@ WantedBy=default.target
         if 'Linger=no' in result.stdout:
             self.print_warning("User lingering is disabled. Service won't start at boot.")
             self.print_info(f"To enable: sudo loginctl enable-linger {self.username}")
-        
+
         return True
 
     def start(self, args):
         """Start AutoSDV system"""
         self.print_info("Starting AutoSDV system...")
-        
+
         try:
             # Check if already running
             result = subprocess.run(
@@ -156,19 +154,19 @@ WantedBy=default.target
             if result.stdout.strip() == 'active':
                 self.print_warning("AutoSDV is already running")
                 return True
-            
+
             # Start the service
             subprocess.run(['systemctl', '--user', 'start', 'autosdv'], check=True)
-            
+
             # Wait a moment for service to start
             time.sleep(2)
-            
+
             # Check if started successfully
             result = subprocess.run(
                 ['systemctl', '--user', 'is-active', 'autosdv'],
                 capture_output=True, text=True
             )
-            
+
             if result.stdout.strip() == 'active':
                 self.print_success("AutoSDV started successfully")
                 self.print_info("System monitor: http://localhost:8080/")
@@ -178,7 +176,7 @@ WantedBy=default.target
                 self.print_error("Failed to start AutoSDV")
                 self.print_info("Check logs: journalctl --user -u autosdv -n 50")
                 return False
-                
+
         except subprocess.CalledProcessError as e:
             self.print_error(f"Failed to start service: {e}")
             return False
@@ -186,7 +184,7 @@ WantedBy=default.target
     def stop(self, args):
         """Stop AutoSDV system"""
         self.print_info("Stopping AutoSDV system...")
-        
+
         try:
             subprocess.run(['systemctl', '--user', 'stop', 'autosdv'], check=True)
             self.print_success("AutoSDV stopped")
@@ -198,26 +196,26 @@ WantedBy=default.target
     def restart(self, args):
         """Restart AutoSDV system"""
         self.print_info("Restarting AutoSDV system...")
-        
+
         try:
             subprocess.run(['systemctl', '--user', 'restart', 'autosdv'], check=True)
-            
+
             # Wait for restart
             time.sleep(3)
-            
+
             # Check status
             result = subprocess.run(
                 ['systemctl', '--user', 'is-active', 'autosdv'],
                 capture_output=True, text=True
             )
-            
+
             if result.stdout.strip() == 'active':
                 self.print_success("AutoSDV restarted successfully")
                 return True
             else:
                 self.print_error("AutoSDV failed to restart")
                 return False
-                
+
         except subprocess.CalledProcessError as e:
             self.print_error(f"Failed to restart service: {e}")
             return False
@@ -226,14 +224,14 @@ WantedBy=default.target
         """Show AutoSDV system status"""
         print(f"\n{Colors.BOLD}AutoSDV System Status{Colors.END}")
         print("=" * 50)
-        
+
         # Check service status
         result = subprocess.run(
             ['systemctl', '--user', 'is-active', 'autosdv'],
             capture_output=True, text=True
         )
         service_status = result.stdout.strip()
-        
+
         # Color code the status
         if service_status == 'active':
             status_display = f"{Colors.GREEN}● RUNNING{Colors.END}"
@@ -243,9 +241,9 @@ WantedBy=default.target
             status_display = f"{Colors.YELLOW}● STOPPED{Colors.END}"
         else:
             status_display = f"{Colors.YELLOW}● {service_status.upper()}{Colors.END}"
-        
+
         print(f"Service Status: {status_display}")
-        
+
         # Get additional service info
         if service_status == 'active':
             # Get runtime
@@ -257,7 +255,7 @@ WantedBy=default.target
                 timestamp = result.stdout.split('=')[1].strip()
                 if timestamp:
                     print(f"Started: {timestamp}")
-            
+
             # Get PID
             result = subprocess.run(
                 ['systemctl', '--user', 'show', 'autosdv', '--property=MainPID'],
@@ -267,15 +265,26 @@ WantedBy=default.target
                 pid = result.stdout.split('=')[1].strip()
                 if pid and pid != '0':
                     print(f"Process ID: {pid}")
-        
+
         # Show recent logs
         print(f"\n{Colors.BOLD}Recent Logs:{Colors.END}")
         print("-" * 50)
-        subprocess.run(
+
+        # Try journalctl first, but fall back to systemctl if needed
+        result = subprocess.run(
             ['journalctl', '--user', '-u', 'autosdv', '-n', '10', '--no-pager'],
-            check=False
+            capture_output=True, text=True, check=False
         )
-        
+
+        if 'No journal files were found' in result.stderr or not result.stdout.strip():
+            # Fallback to systemctl status to get logs
+            subprocess.run(
+                ['systemctl', '--user', 'status', 'autosdv', '--no-pager', '-n', '10'],
+                check=False
+            )
+        else:
+            print(result.stdout)
+
         # Show available commands
         print(f"\n{Colors.BOLD}Available Commands:{Colors.END}")
         if service_status == 'active':
@@ -285,56 +294,110 @@ WantedBy=default.target
         else:
             print("  autosdv start    - Start the system")
             print("  autosdv install  - Install systemd service")
-        
+
         return True
 
     def monitor(self, args):
         """Open the web monitor in browser"""
         url = "http://localhost:8080/"
-        
+
         self.print_info(f"Opening web monitor at {url}")
-        
+
         # Check if service is running
         result = subprocess.run(
             ['systemctl', '--user', 'is-active', 'autosdv'],
             capture_output=True, text=True
         )
-        
+
         if result.stdout.strip() != 'active':
             self.print_warning("AutoSDV is not running. Starting it first...")
             if not self.start(args):
                 return False
             time.sleep(3)  # Give it time to start the web server
-        
+
         # Try to open in browser
         try:
             webbrowser.open(url)
             self.print_success(f"Web monitor opened in browser")
         except:
             self.print_info(f"Please open your browser and navigate to: {url}")
-        
+
         return True
+
+    def enable(self, args):
+        """Enable AutoSDV to start automatically at login"""
+        self.print_info("Enabling AutoSDV automatic startup at login...")
+
+        try:
+            # Check if service exists
+            service_file = self.user_systemd_dir / 'autosdv.service'
+            if not service_file.exists():
+                self.print_error("AutoSDV service not installed. Run 'autosdv install' first.")
+                return False
+
+            # Enable the service
+            subprocess.run(['systemctl', '--user', 'enable', 'autosdv'], check=True)
+            self.print_success("AutoSDV enabled for automatic startup at login")
+
+            # Check lingering status
+            result = subprocess.run(
+                ['loginctl', 'show-user', self.username, '-p', 'Linger'],
+                capture_output=True, text=True
+            )
+            if 'Linger=no' in result.stdout:
+                self.print_warning("User lingering is disabled. Service will only start when you log in.")
+                self.print_info(f"To enable startup at boot (without login): sudo loginctl enable-linger {self.username}")
+            else:
+                self.print_info("Service will start at system boot (lingering enabled)")
+
+            return True
+
+        except subprocess.CalledProcessError as e:
+            self.print_error(f"Failed to enable service: {e}")
+            return False
+
+    def disable(self, args):
+        """Disable AutoSDV automatic startup"""
+        self.print_info("Disabling AutoSDV automatic startup...")
+
+        try:
+            # Check if service exists
+            service_file = self.user_systemd_dir / 'autosdv.service'
+            if not service_file.exists():
+                self.print_error("AutoSDV service not installed")
+                return False
+
+            # Disable the service
+            subprocess.run(['systemctl', '--user', 'disable', 'autosdv'], check=True)
+            self.print_success("AutoSDV automatic startup disabled")
+            self.print_info("Service can still be started manually with: autosdv start")
+
+            return True
+
+        except subprocess.CalledProcessError as e:
+            self.print_error(f"Failed to disable service: {e}")
+            return False
 
     def uninstall(self, args):
         """Uninstall AutoSDV systemd service"""
         self.print_info("Uninstalling AutoSDV systemd service...")
-        
+
         # Stop the service first
         subprocess.run(['systemctl', '--user', 'stop', 'autosdv'], check=False)
-        
+
         # Disable the service
         subprocess.run(['systemctl', '--user', 'disable', 'autosdv'], check=False)
-        
+
         # Remove service file
         service_file = self.user_systemd_dir / 'autosdv.service'
         if service_file.exists():
             service_file.unlink()
             self.print_success("Service file removed")
-        
+
         # Reload systemd
         subprocess.run(['systemctl', '--user', 'daemon-reload'], check=False)
         subprocess.run(['systemctl', '--user', 'reset-failed'], check=False)
-        
+
         self.print_success("AutoSDV service uninstalled")
         return True
 
@@ -354,38 +417,42 @@ Examples:
   autosdv restart   # Restart the system
         """
     )
-    
+
     # Add subcommands
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
+
     subparsers.add_parser('install', help='Install AutoSDV systemd service')
     subparsers.add_parser('uninstall', help='Uninstall AutoSDV systemd service')
+    subparsers.add_parser('enable', help='Enable automatic startup at login')
+    subparsers.add_parser('disable', help='Disable automatic startup')
     subparsers.add_parser('start', help='Start AutoSDV system')
     subparsers.add_parser('stop', help='Stop AutoSDV system')
     subparsers.add_parser('restart', help='Restart AutoSDV system')
     subparsers.add_parser('status', help='Show system status and logs')
     subparsers.add_parser('monitor', help='Open web monitor in browser')
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return 1
-    
+
     # Create AutoSDV instance and run command
     autosdv = AutoSDV()
-    
+
     # Map commands to methods
     commands = {
         'install': autosdv.install,
         'uninstall': autosdv.uninstall,
+        'enable': autosdv.enable,
+        'disable': autosdv.disable,
         'start': autosdv.start,
         'stop': autosdv.stop,
         'restart': autosdv.restart,
         'status': autosdv.status,
         'monitor': autosdv.monitor,
     }
-    
+
     # Execute the command
     try:
         success = commands[args.command](args)
