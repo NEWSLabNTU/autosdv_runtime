@@ -16,8 +16,10 @@ export RCUTILS_LOGGING_USE_STDOUT=1
 # Change to workspace directory
 cd "$WORKSPACE_DIR"
 
-# Source ROS2 and workspace
-source "/opt/ros/${ROS_DISTRO}/setup.bash"
+# Source Autoware environment (includes ROS setup)
+source /opt/autoware/autoware-env
+
+# Source workspace
 source "${WORKSPACE_DIR}/install/setup.bash"
 
 # Log startup

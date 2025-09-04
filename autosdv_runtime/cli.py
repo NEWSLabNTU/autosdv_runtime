@@ -81,41 +81,20 @@ class AutoSDV:
             self.print_error(f"Launch script not found. Please build the workspace first.")
             return False
 
-        # Generate the service file with correct paths
-        service_content = f"""[Unit]
-Description=AutoSDV Autonomous Vehicle System
-Documentation=https://github.com/AutoSDV/AutoSDV
-After=network-online.target
-Wants=network-online.target
+        # Load and process the systemd template
+        systemd_template = self.package_share_dir / 'systemd' / 'autosdv.service'
+        if not systemd_template.exists():
+            self.print_error(f"Service template not found: {systemd_template}")
+            return False
 
-[Service]
-Type=exec
-Environment=HOME={Path.home()}
-WorkingDirectory={self.workspace_dir}
+        # Read template and substitute variables
+        with open(systemd_template, 'r') as f:
+            service_content = f.read()
 
-# Main execution - call the generated launch script
-ExecStart={self.launch_script}
-
-# Restart policy
-Restart=on-failure
-RestartSec=10s
-StartLimitInterval=300s
-StartLimitBurst=5
-
-# Process management
-KillMode=mixed
-KillSignal=SIGTERM
-TimeoutStartSec=120s
-TimeoutStopSec=30s
-
-# Logging
-StandardOutput=journal+console
-StandardError=journal+console
-SyslogIdentifier=autosdv
-
-[Install]
-WantedBy=default.target
-"""
+        # Replace template variables
+        service_content = service_content.replace('%i', self.username)
+        service_content = service_content.replace('%h', str(Path.home()))
+        service_content = service_content.replace('%h/AutoSDV', str(self.workspace_dir))
 
         # Write service file
         service_file = self.user_systemd_dir / 'autosdv.service'

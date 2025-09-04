@@ -1,45 +1,28 @@
 [Unit]
 Description=AutoSDV Autonomous Vehicle System
 Documentation=https://github.com/AutoSDV/AutoSDV
-After=network-online.target graphical-session.target
+After=network-online.target
 Wants=network-online.target
-Requires=systemd-networkd-wait-online.service
-
-# Dependencies for hardware interfaces
-After=serial-getty@ttyUSB0.service serial-getty@ttyACM0.service
-After=systemd-udev-settle.service
-
-# Ensure the service starts after critical system services
-After=systemd-resolved.service systemd-timesyncd.service
 
 [Service]
 Type=exec
-User=%i
-Group=%i
-
-# Environment setup
 Environment=HOME=/home/%i
-Environment=XDG_RUNTIME_DIR=/run/user/1000
-Environment=SYSTEMD_MODE=true
-Environment=RCUTILS_LOGGING_USE_STDOUT=1
-Environment=RCUTILS_COLORIZED_OUTPUT=0
+Environment=AUTOWARE_HOME=/opt/autoware
+Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+Environment=CYCLONEDDS_URI=file:///opt/autoware/cyclonedds.xml
+WorkingDirectory=%h/AutoSDV
 
-# Working directory - determined dynamically from ROS workspace
-WorkingDirectory=%h
+# Disable network isolation for ROS 2 DDS discovery
+PrivateNetwork=no
+IPAddressDeny=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+PrivateDevices=no
 
-# Main execution command - use ROS2 installed command
-ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash && autosdv-launch'
+# Main execution - call the generated launch script
+ExecStart=%h/AutoSDV/install/autosdv_runtime/share/autosdv_runtime/scripts/autosdv-launch.sh
 
-# Pre-execution checks and setup - find workspace dynamically
-ExecStartPre=/bin/bash -c 'source /opt/ros/humble/setup.bash && WORKSPACE=$(python3 -c "from autosdv_runtime.common import get_workspace_dir; print(get_workspace_dir())") && if [ ! -f "$WORKSPACE/install/setup.bash" ]; then echo "ERROR: AutoSDV workspace not built. Run: cd $WORKSPACE && make build"; exit 1; fi'
-ExecStartPre=/bin/bash -c 'source /opt/ros/humble/setup.bash && WORKSPACE=$(python3 -c "from autosdv_runtime.common import get_workspace_dir; print(get_workspace_dir())") && mkdir -p "$WORKSPACE/logs/launch" "$WORKSPACE/logs/systemd"'
-
-# Graceful shutdown
-ExecStop=/bin/kill -TERM $MAINPID
-ExecStopPost=/bin/bash -c 'source /opt/ros/humble/setup.bash && WORKSPACE=$(python3 -c "from autosdv_runtime.common import get_workspace_dir; print(get_workspace_dir())") && rm -f "$WORKSPACE/logs/launch/*.pid"'
-
-# Restart policy for production reliability
-Restart=always
+# Restart policy
+Restart=on-failure
 RestartSec=10s
 StartLimitInterval=300s
 StartLimitBurst=5
@@ -49,46 +32,11 @@ KillMode=mixed
 KillSignal=SIGTERM
 TimeoutStartSec=120s
 TimeoutStopSec=30s
-TimeoutKillSec=10s
 
-# Security and resource limits
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=%h/repos
-ReadWritePaths=%h/.ros
-ReadWritePaths=/tmp
-ReadWritePaths=/dev/shm
-
-# Allow access to hardware interfaces
-SupplementaryGroups=dialout plugdev input video audio gpio i2c spi
-
-# Resource limits for autonomous vehicle operation
-LimitNOFILE=65536
-LimitNPROC=4096
-LimitMEMLOCK=infinity
-
-# Real-time scheduling for critical operations
-# Note: Requires user to be in realtime group
-# IOSchedulingClass=1
-# IOSchedulingPriority=7
-
-# Logging configuration
-StandardOutput=journal
-StandardError=journal
+# Logging
+StandardOutput=journal+console
+StandardError=journal+console
 SyslogIdentifier=autosdv
-SyslogFacility=daemon
-SyslogLevel=info
-
-# Journal-specific settings
-# These help with log management and rotation
-StandardOutputOptions=+compress
-StandardErrorOptions=+compress
 
 [Install]
 WantedBy=default.target
-
-# Template service configuration
-# Install with: sudo systemctl enable autosdv@username.service
-# Where 'username' is the user who owns the AutoSDV installation
