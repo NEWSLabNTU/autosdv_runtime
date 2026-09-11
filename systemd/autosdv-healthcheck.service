@@ -1,16 +1,13 @@
 [Unit]
 Description=AutoSDV System Health Check
-Documentation=https://github.com/AutoSDV/AutoSDV
-Requires=autosdv@%i.service
-After=autosdv@%i.service
+Documentation=https://github.com/NEWSLabNTU/AutoSDV
+Requires=autosdv.service
+After=autosdv.service
 
 [Service]
 Type=oneshot
-User=%i
-Group=%i
 
 # Environment
-Environment=HOME=/home/%i
 WorkingDirectory=%h
 
 # Health check script - use ROS2 installed command

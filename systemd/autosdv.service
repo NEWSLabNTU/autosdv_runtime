@@ -1,16 +1,17 @@
 [Unit]
 Description=AutoSDV Autonomous Vehicle System
-Documentation=https://github.com/AutoSDV/AutoSDV
+Documentation=https://github.com/NEWSLabNTU/AutoSDV
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=exec
-Environment=HOME=/home/%i
 Environment=AUTOWARE_HOME=/opt/autoware
 Environment=RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-Environment=CYCLONEDDS_URI=file:///opt/autoware/cyclonedds.xml
-WorkingDirectory=%h/AutoSDV
+# CYCLONEDDS_URI is deliberately not set here. The launch script exports the
+# workspace's own cyclonedds.xml, and pinning a path in the unit would quietly
+# override the tuning this repo ships.
+WorkingDirectory=@AUTOSDV_WORKSPACE@
 
 # Disable network isolation for ROS 2 DDS discovery
 PrivateNetwork=no
@@ -19,7 +20,7 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 PrivateDevices=no
 
 # Main execution - call the generated launch script
-ExecStart=%h/AutoSDV/install/autosdv_runtime/share/autosdv_runtime/scripts/autosdv-launch.sh
+ExecStart=@AUTOSDV_WORKSPACE@/install/autosdv_runtime/share/autosdv_runtime/scripts/autosdv-launch.sh
 
 # Restart policy
 Restart=on-failure

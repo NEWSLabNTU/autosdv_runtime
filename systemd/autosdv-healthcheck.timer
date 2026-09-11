@@ -1,7 +1,7 @@
 [Unit]
 Description=AutoSDV Health Check Timer
-Documentation=https://github.com/AutoSDV/AutoSDV
-Requires=autosdv@%i.service
+Documentation=https://github.com/NEWSLabNTU/AutoSDV
+Requires=autosdv.service
 
 [Timer]
 # Run health check every 5 minutes

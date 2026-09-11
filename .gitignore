@@ -8,3 +8,9 @@
 # Python
 *.py[oc]
 __pycache__/
+
+# colcon build artifacts, when this package is built standalone rather than
+# from the AutoSDV workspace root
+/build/
+/install/
+/log/
